@@ -1,0 +1,89 @@
+# Modules are split by address family on purpose.
+#
+#   *_internal  -> probes another Railway service over *.railway.internal, which
+#                  resolves IPv6-first; the container's 10.x IPv4 is unroutable
+#                  from a peer, so ip6 must be preferred.
+#   everything else -> probes the public internet, where Railway containers have
+#                  IPv4 egress; ip6 is not assumed.
+#
+# The icmp prober is deliberately absent: Railway containers drop CAP_NET_RAW, so
+# every ping probe would fail with a permission error rather than a real result.
+modules:
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      follow_redirects: true
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+
+  http_2xx_internal:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      follow_redirects: true
+      preferred_ip_protocol: "ip6"
+      ip_protocol_fallback: true
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+
+  http_2xx_insecure:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      follow_redirects: true
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+      tls_config:
+        insecure_skip_verify: true
+
+  http_post_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: POST
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+
+  http_4xx_or_5xx_is_ok:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+      valid_status_codes: [200, 201, 202, 204, 301, 302, 303, 307, 308, 401, 403, 404]
+
+  tcp_connect:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+
+  tcp_connect_internal:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      preferred_ip_protocol: "ip6"
+      ip_protocol_fallback: true
+
+  tls_connect:
+    prober: tcp
+    timeout: 10s
+    tcp:
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+      tls: true
+
+  dns_udp_a:
+    prober: dns
+    timeout: 10s
+    dns:
+      transport_protocol: "udp"
+      preferred_ip_protocol: "ip4"
+      query_name: "example.com"
+      query_type: "A"

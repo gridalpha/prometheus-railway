@@ -1,0 +1,65 @@
+groups:
+  - name: railway-defaults
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Scrape target {{ $labels.job }}/{{ $labels.instance }} is down"
+          description: "Prometheus has failed to scrape {{ $labels.instance }} for more than 5 minutes."
+
+      - alert: ProbeFailed
+        expr: probe_success == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Blackbox probe of {{ $labels.instance }} is failing"
+          description: "{{ $labels.instance }} has not answered a successful probe for more than 5 minutes."
+
+      - alert: ProbeSlow
+        expr: probe_duration_seconds > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Blackbox probe of {{ $labels.instance }} is slow"
+          description: "{{ $labels.instance }} has taken over 5s to answer for more than 10 minutes."
+
+      - alert: ProbeTLSCertificateExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 14 * 24 * 3600
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate for {{ $labels.instance }} expires in under 14 days"
+          description: "The certificate served by {{ $labels.instance }} expires soon."
+
+      - alert: PrometheusStorageNearlyFull
+        expr: prometheus_tsdb_storage_blocks_bytes / prometheus_tsdb_retention_limit_bytes > 0.9 and prometheus_tsdb_retention_limit_bytes > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus TSDB is within 10% of its size retention limit"
+          description: "Raise RETENTION_SIZE and the Railway volume, or lower RETENTION_TIME."
+
+      - alert: PrometheusRuleEvaluationFailing
+        expr: increase(prometheus_rule_evaluation_failures_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus is failing to evaluate recording or alerting rules"
+          description: "Check the Rules page for the failing group."
+
+      - alert: PrometheusNotConnectedToAlertmanager
+        expr: prometheus_notifications_alertmanagers_discovered < 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus has no Alertmanager to send alerts to"
+          description: "ALERTMANAGER_HOST does not resolve, so no alert can be delivered."
