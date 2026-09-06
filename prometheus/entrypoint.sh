@@ -3,7 +3,7 @@
 # Prometheus (private, on the Railway private network) behind Caddy (public, basic auth).
 set -euo pipefail
 
-log() { printf '[entrypoint] %s\n' "$*"; }
+log() { printf '[entrypoint] %s\n' "$*" >&2; }
 die() { printf '[entrypoint] FATAL: %s\n' "$*" >&2; exit 1; }
 
 PORT="${PORT:-8080}"
@@ -38,6 +38,26 @@ yaml_list() {
   for item in $raw; do
     item="$(printf '%s' "$item" | tr -d '[:space:]')"
     [ -n "$item" ] || continue
+    [ -z "$out" ] || out="$out, "
+    out="$out\"$item\""
+  done
+  printf '[%s]' "$out"
+}
+
+# Same, but drops any URL with no host. A ${{svc.RAILWAY_PUBLIC_DOMAIN}} reference for a
+# service that has no domain renders empty, leaving "https:///healthz" — which would
+# otherwise be probed forever and fire a permanent false alert.
+yaml_url_list() {
+  local raw="$1" item rest out=""
+  local IFS=','
+  for item in $raw; do
+    item="$(printf '%s' "$item" | tr -d '[:space:]')"
+    [ -n "$item" ] || continue
+    case "$item" in
+      *://*) rest="${item#*://}" ;;
+      *) rest="$item" ;;
+    esac
+    case "$rest" in ""|/*) log "skipping probe target with no host: ${item}"; continue ;; esac
     [ -z "$out" ] || out="$out, "
     out="$out\"$item\""
   done
@@ -86,7 +106,7 @@ EOF
 EOF
   fi
 
-  if [ -n "$PROBE_TARGETS" ]; then
+  if [ "$PROBE_LIST" != "[]" ]; then
     cat <<EOF
 
   - job_name: blackbox_http
@@ -94,7 +114,7 @@ EOF
     params:
       module: [${PROBE_MODULE}]
     static_configs:
-      - targets: $(yaml_list "$PROBE_TARGETS")
+      - targets: ${PROBE_LIST}
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -135,10 +155,13 @@ render_caddyfile() {
 EOF
 }
 
+PROBE_LIST="$(yaml_url_list "$PROBE_TARGETS")"
+
 log "alertmanager: ${ALERTMANAGER_HOST}"
 log "blackbox:     ${BLACKBOX_HOST}"
 log "external url: ${EXTERNAL_URL:-<none>}"
 log "retention:    ${RETENTION_TIME} / ${RETENTION_SIZE}"
+log "probes:       ${PROBE_LIST} via ${PROBE_MODULE}"
 
 render_prometheus_yml > /etc/prometheus/prometheus.yml
 AUTH_HASH="$(caddy hash-password --plaintext "$AUTH_PASSWORD")"

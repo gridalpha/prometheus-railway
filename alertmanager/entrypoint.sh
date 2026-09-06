@@ -3,7 +3,7 @@
 # Alertmanager (private, reachable by Prometheus) behind Caddy (public, basic auth).
 set -euo pipefail
 
-log() { printf '[entrypoint] %s\n' "$*"; }
+log() { printf '[entrypoint] %s\n' "$*" >&2; }
 die() { printf '[entrypoint] FATAL: %s\n' "$*" >&2; exit 1; }
 
 PORT="${PORT:-8080}"
